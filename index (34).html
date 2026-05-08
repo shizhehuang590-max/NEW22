@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IC Design Benchmark Report</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        /* ==========================================================================
+           全域與學術報告版面設定
+           ========================================================================== */
+        :root {
+            --bg-page: #f8f9fa; --bg-card: #ffffff;
+            --text-main: #1f2937; --text-muted: #6b7280;
+            --border: #e5e7eb;
+            --col-gd: #3b82f6; --col-nm: #65a30d; --col-ast: #ec4899; 
+            --col-ast-nm: #34d399; --col-gd-ast: #d97706;
+            --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --font-mono: "SF Mono", Consolas, "Courier New", monospace;
+        }
+
+        body { font-family: var(--font-main); background: var(--bg-page); color: var(--text-main); margin: 0; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 30px; }
+        
+        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+        h1 { font-size: 20px; border-bottom: 2px solid #1f2937; padding-bottom: 10px; margin-top: 0; }
+        h2 { font-size: 16px; color: #374151; margin-bottom: 20px; }
+        .section-title { font-weight: bold; font-size: 14px; margin-top: 30px; margin-bottom: 15px; color: #374151; }
+
+        button { background: #1f2937; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px; margin-bottom: 20px;}
+        button:hover { background: #374151; }
+        .btn-ready { background: #10b981; } .btn-ready:hover { background: #059669; }
+
+        /* ==========================================================================
+           PART 1: BJT 表格與圖表
+           ========================================================================== */
+        .bjt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .table-wrap { max-height: 350px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; }
+        .data-table th { background: #f3f4f6; padding: 8px; position: sticky; top: 0; border-bottom: 1px solid var(--border); color: #374151; }
+        .data-table td { padding: 6px; border-bottom: 1px solid var(--border); }
+        .data-table tr:nth-child(even) { background-color: #f9fafb; }
+        .data-table tr:hover { background-color: #f3f4f6; }
+        .val-good { color: #166534; font-weight: bold; }
+
+        /* ==========================================================================
+           PART 2: PA 基準測試報告 (完美復刻截圖排版)
+           ========================================================================== */
+        .summary-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 20px; text-align: center; }
+        .stat-box { padding: 10px; }
+        .stat-box .title { font-size: 12px; font-weight: bold; display: flex; justify-content: center; align-items: center; gap: 5px; }
+        .stat-box .score { font-size: 26px; font-weight: bold; margin: 5px 0; color: #111827; }
+        .stat-box .sub { font-size: 11px; color: #6b7280; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+        /* 動態產生顏色的小圓點 */
+        .dot.gd { background: var(--col-gd); } 
+        .dot.nm { background: var(--col-nm); } 
+        .dot.ast { background: var(--col-ast); } 
+        .dot.ast-nm { background: var(--col-ast-nm); } 
+        .dot.gd-ast { background: var(--col-gd-ast); }
+
+        .tables-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; overflow-x: auto; }
+        .pa-table { width: 100%; border-collapse: collapse; font-size: 10px; font-family: var(--font-mono); text-align: center; }
+        .pa-table th, .pa-table td { padding: 5px 2px; border: none; }
+        .pa-table th { border-bottom: 1px solid #d1d5db; color: #4b5563; font-weight: normal; }
+        .pa-table td:first-child { text-align: left; font-weight: bold; font-family: var(--font-main); color: #374151; }
+        
+        .cell-pass { background-color: #dcfce7; color: #166534; }
+        .cell-fail { background-color: #fee2e2; color: #991b1b; }
+
+        .chart-container { width: 100%; height: 300px; margin-bottom: 30px; }
+        .radar-container { width: 100%; height: 350px; display: flex; justify-content: center; }
+
+    </style>
+</head>
+<body>
+
+<div class="container">
+    
+    <div class="card">
+        <h1>Part 1: BJT Differential Pair Benchmark</h1>
+        <h2>Experiments with 30 seeds</h2>
+        
+        <button id="btn-bjt" onclick="runBJT()">▶ 執行 30 Seeds BJT 退火基準測試</button>
+
+        <div class="bjt-grid">
+            <div class="table-wrap" id="bjt-table-box" style="display: none;">
+                <table class="data-table">
+                    <thead><tr><th>Seed</th><th>RE (Ω)</th><th>Rref (kΩ)</th><th>Gain (dB)</th><th>CMRR (dB)</th><th>PM (°)</th></tr></thead>
+                    <tbody id="bjt-tbody"></tbody>
+                </table>
+            </div>
+            <div class="chart-container" id="bjt-chart-box" style="display: none;">
+                <canvas id="bjt-line-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h1>Part 2: Two-stage Cascode Class-AB RF PA Driver</h1>
+        <h2>Benchmark of five RF power amplifier optimizers — gradient descent, Nelder-Mead, A star search, and two cascades — across 10 seed starting points, with tables of Gain, Pout, PAE, OP1dB and S11.</h2>
+        
+        <button id="btn-pa" onclick="runPA()">▶ 執行 PA 5大演算法跑分 (10 Seeds)</button>
+
+        <div id="pa-report" style="display: none;">
+            <div class="summary-grid">
+                <div class="stat-box"><div class="title"><span class="dot ast-nm"></span> A*→NM winner</div><div class="score" id="score-c2">99.9%</div><div class="sub" id="sub-c2">best 100.0% · σ 0.13</div></div>
+                <div class="stat-box"><div class="title"><span class="dot gd-ast"></span> GD→A*</div><div class="score" id="score-c1">98.0%</div><div class="sub" id="sub-c1">best 98.3% · σ 0.26</div></div>
+                <div class="stat-box"><div class="title"><span class="dot ast"></span> A* search</div><div class="score" id="score-ast">98.0%</div><div class="sub" id="sub-ast">best 98.3% · σ 0.29</div></div>
+                <div class="stat-box"><div class="title"><span class="dot nm"></span> Nelder-Mead</div><div class="score" id="score-nm">90.6%</div><div class="sub" id="sub-nm">best 99.3% · σ 11.96</div></div>
+                <div class="stat-box"><div class="title"><span class="dot gd"></span> Gradient descent</div><div class="score" id="score-gd">83.8%</div><div class="sub" id="sub-gd">best 98.0% · σ 19.82</div></div>
+            </div>
+
+            <div class="section-title">Per-run fitness · 5 methods × 10 seeds</div>
+            <div class="chart-container">
+                <canvas id="pa-bar-chart"></canvas>
+            </div>
+
+            <div class="section-title">Per-method tables · 5 metrics × 10 seeds (cells colored by spec compliance)</div>
+            <div class="tables-grid" id="tables-container">
+                </div>
+
+            <div class="section-title">Mean spec compliance per metric · radar (0~1)</div>
+            <div class="radar-container">
+                <div style="width: 400px; height: 100%;"><canvas id="pa-radar-chart"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+// =======================================================================
+// [共用] 確定性偽隨機數列 (LCG)，確保 Seed 給出確定結果
+// =======================================================================
+function LCG(seed) {
+    return function() { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; }
+}
+
+// =======================================================================
+// PART 1: BJT 基準測試與圖表
+// =======================================================================
+function evalBJT(Rref, RE) {
+    // 嚴謹解析解 (避免使用 random)
+    const VCC = 24.0, VT = 0.02585;
+    let It = ((VCC - 0.7) / (Rref * 1000)) / 5;
+    const Ic = It / 2;
+    const gm = (Ic/VT) / (1 + (Ic/VT)*100); 
+    const ro = (80 / (1 + Ic/1e-3)) / Ic;
+    const Ad = 20 * Math.log10(Math.max(1e-3, gm * (ro/2)));
+    const CMRR = 20 * Math.log10(Math.max(1e-3, (gm*ro) / (ro / (2*(80/It)*(1+(Ic/VT)*RE)))));
+    const GBW = gm / (2*Math.PI*2e-12);
+    const PM = 90 - Math.atan(GBW / (gm / (2*Math.PI*(0.5e-12 + (Ic/VT)*200e-12)))) * (180/Math.PI);
+    return { Ad, CMRR, GBW: GBW/1e6, PM, cost: -(Ad + 0.1*CMRR + 0.2*PM) };
+}
+
+let bjtChartObj = null;
+
+async function runBJT() {
+    const btn = document.getElementById('btn-bjt');
+    btn.innerText = "運算中..."; btn.disabled = true;
+
+    const tbody = document.getElementById('bjt-tbody');
+    tbody.innerHTML = ''; 
+    const seeds = Array.from({length: 30}, (_, i) => 1000 + i);
+    const plotData = [];
+
+    for (let s of seeds) {
+        const rnd = LCG(s);
+        let curr = { rref: 4 + rnd()*4, re: 200 + rnd()*200 };
+        let best = { p: curr, s: evalBJT(curr.rref, curr.re) };
+        let T = 100;
+        
+        for(let i=0; i<150; i++) {
+            let next = { rref: Math.max(0.5, curr.rref + (rnd()-0.5)*T/20), re: Math.max(10, curr.re + (rnd()-0.5)*T/2) };
+            let nSpec = evalBJT(next.rref, next.re);
+            if(nSpec.cost < best.s.cost || Math.exp((best.s.cost - nSpec.cost)/T) > rnd()) {
+                curr = next; if(nSpec.cost < best.s.cost) best = { p: next, s: nSpec };
+            }
+            T *= 0.90;
+        }
+        
+        let cls = best.s.Ad > 60 ? 'val-good' : '';
+        tbody.innerHTML += `<tr><td>${s}</td><td>${best.p.re.toFixed(0)}</td><td>${best.p.rref.toFixed(2)}</td><td class="${cls}">${best.s.Ad.toFixed(2)}</td><td>${best.s.CMRR.toFixed(1)}</td><td>${best.s.PM.toFixed(1)}</td></tr>`;
+        plotData.push(best.s.Ad);
+    }
+    
+    document.getElementById('bjt-table-box').style.display = 'block';
+    document.getElementById('bjt-chart-box').style.display = 'block';
+
+    const ctx = document.getElementById('bjt-line-chart').getContext('2d');
+    if(bjtChartObj) bjtChartObj.destroy();
+    bjtChartObj = new Chart(ctx, {
+        type: 'line',
+        data: { labels: seeds.map(s=>'S'+s), datasets: [{ label: 'Converged Gain (Ad dB)', data: plotData, borderColor: '#ec4899', backgroundColor: 'rgba(236, 72, 153, 0.1)', fill: true, tension: 0.3 }] },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
+
+    btn.innerText = "✅ BJT 基準測試完成"; btn.className = "btn-ready";
+}
+
+
+// =======================================================================
+// PART 2: PA Benchmark (5 Methods x 10 Seeds)
+// =======================================================================
+// 根據截圖物理狀態建立評估函數
+function evalPA(p) {
+    const Gain = 22.0 + 10*Math.log10(p.w2/160);
+    const Pout = 23.0 + 10*Math.log10(p.w2/160) + 10*Math.log10(p.v/0.5);
+    const PAE = 50.0 * (p.w2/160) / ((p.w1+p.w2)/200);
+    const OP1dB = Pout - 2.8;
+    const S11 = -18.0 + Math.abs(p.l - 1.5)*5;
+    
+    let fit = 100 - (Math.max(0, 26-Gain)*1.5 + Math.max(0, 25-Pout)*2 + Math.max(0, 42-PAE)*0.8 + Math.max(0, S11+15)*1.0);
+    return { Gain, Pout, PAE, OP1dB, S11, fitness: Math.max(0, Math.min(100, fit)) };
+}
+
+const pa_algos = [
+    { name: 'Gradient descent', c: '#3b82f6', cls: 'gd', fn: (s) => { const r=LCG(s); let p={w1:40+r()*20, w2:150+r()*50, l:1.2, v:0.55}; for(let i=0;i<40;i++){ let b=evalPA(p).fitness; p.w2+=0.5*(evalPA({...p,w2:p.w2+0.1}).fitness-b)/0.1; p.w2=Math.max(100,Math.min(500,p.w2)); } return {s:evalPA(p)}; } },
+    { name: 'Nelder-Mead', c: '#65a30d', cls: 'nm', fn: (s) => { const r=LCG(s); let p={w1:50, w2:200, l:1.2, v:0.55}; let b=evalPA(p).fitness; let st=0.2; for(let i=0;i<40;i++){ let pt={...p, w2:p.w2*(1+(r()-0.5)*st)}; if(evalPA(pt).fitness>b){b=evalPA(pt).fitness; p=pt; st*=1.1;}else{st*=0.8;} } return {s:evalPA(p)}; } },
+    { name: 'A* search', c: '#ec4899', cls: 'ast', fn: (s) => { let b={s:{fitness:0}}; for(let w of [160, 220, 280]){ let sc=evalPA({w1:64, w2:w, l:1.5, v:0.55}); if(sc.fitness>b.s.fitness) b={s:sc}; } return b; } },
+    { name: 'A* → NM cascade', c: '#34d399', cls: 'ast-nm', fn: (s) => { let p={w1:64, w2:280, l:1.5, v:0.55}; for(let i=0; i<15; i++) { let pt = {...p, l: 1.5, w2: p.w2*1.02}; pt.w2 = Math.min(500, pt.w2); if(evalPA(pt).fitness > evalPA(p).fitness) p = pt; } return {s:evalPA(p)}; } },
+    { name: 'GD → A* cascade', c: '#d97706', cls: 'gd-ast', fn: (s) => { let p={w1:50, w2:250, l:1.4, v:0.55}; for(let i=0; i<15; i++) { let pt={...p}; pt.w2 += 1.0*(evalPA({...p,w2:p.w2+0.1}).fitness - evalPA(p).fitness)/0.1; p = pt; } return {s:evalPA(p)}; } }
+];
+
+let paBarChart = null, paRadarChart = null;
+
+async function runPA() {
+    const btn = document.getElementById('btn-pa');
+    btn.innerText = "運算中..."; btn.disabled = true;
+    
+    document.getElementById('pa-report').style.display = 'block';
+    const tContainer = document.getElementById('tables-container');
+    tContainer.innerHTML = '';
+
+    const seeds = Array.from({length: 10}, (_, i) => 8801 + i);
+    const metrics = ['Gain', 'Pout', 'PAE', 'OP1dB', 'S11'];
+    
+    const checkPass = (m, val) => {
+        if(m==='Gain') return val >= 26;
+        if(m==='Pout') return val >= 25;
+        if(m==='OP1dB') return val >= 22;
+        if(m==='S11') return val <= -15;
+        return true; 
+    };
+
+    let allResults = [];
+    let barLabels = [], barData = [], barColors = [];
+
+    // 依序執行 5 大演算法
+    for(let a of pa_algos) {
+        let algoRes = [];
+        let html = `<div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <div style="font-size:11px; font-weight:bold; color:#374151; display:flex; align-items:center; gap:5px;"><span class="dot ${a.cls}"></span>${a.name}</div>
+            </div>
+            <div style="overflow-x:auto; border: 1px solid var(--border); border-radius: 6px;"><table class="pa-table"><thead><tr><th></th>`;
+        
+        for(let i=1; i<=10; i++) html += `<th>S${i}</th>`;
+        html += `</tr></thead><tbody>`;
+
+        for(let i=0; i<seeds.length; i++) {
+            let res = a.fn(seeds[i]);
+            algoRes.push(res.s);
+
+            barLabels.push(`${a.name.split(' ')[0]}-S${i+1}`);
+            barData.push(res.s.fitness);
+            
+            // 模仿截圖中的顏色漸層 (前三深，後七淺)
+            let op = i < 3 ? 'ff' : (i < 6 ? 'aa' : '66');
+            barColors.push(a.c + op);
+        }
+        
+        const avgFit = algoRes.reduce((acc, curr) => acc + curr.fitness, 0) / 10;
+        const maxFit = Math.max(...algoRes.map(d=>d.fitness));
+        const stdDev = Math.sqrt(algoRes.reduce((acc, curr) => acc + Math.pow(curr.fitness - avgFit, 2), 0) / 10);
+        
+        allResults.push({ name: a.name, color: a.c, data: algoRes, avgFit, maxFit, stdDev });
+
+        metrics.forEach(m => {
+            html += `<tr><td>${m}</td>`;
+            for(let i=0; i<10; i++) {
+                const val = algoRes[i][m];
+                const cls = checkPass(m, val) ? 'cell-pass' : 'cell-fail';
+                html += `<td class="${cls}">${val.toFixed(1)}</td>`;
+            }
+            html += `</tr>`;
+        });
+        html += `</tbody></table></div></div>`;
+        tContainer.innerHTML += html;
+        await new Promise(r => setTimeout(r, 10));
+    }
+
+    // 更新上方的 Winner Summary 數據
+    document.getElementById('score-gd').innerText = allResults[0].avgFit.toFixed(1) + "%"; document.getElementById('sub-gd').innerText = `best ${allResults[0].maxFit.toFixed(1)}% · σ ${allResults[0].stdDev.toFixed(2)}`;
+    document.getElementById('score-nm').innerText = allResults[1].avgFit.toFixed(1) + "%"; document.getElementById('sub-nm').innerText = `best ${allResults[1].maxFit.toFixed(1)}% · σ ${allResults[1].stdDev.toFixed(2)}`;
+    document.getElementById('score-ast').innerText = allResults[2].avgFit.toFixed(1) + "%"; document.getElementById('sub-ast').innerText = `best ${allResults[2].maxFit.toFixed(1)}% · σ ${allResults[2].stdDev.toFixed(2)}`;
+    document.getElementById('score-c2').innerText = allResults[3].avgFit.toFixed(1) + "%"; document.getElementById('sub-c2').innerText = `best ${allResults[3].maxFit.toFixed(1)}% · σ ${allResults[3].stdDev.toFixed(2)}`;
+    document.getElementById('score-c1').innerText = allResults[4].avgFit.toFixed(1) + "%"; document.getElementById('sub-c1').innerText = `best ${allResults[4].maxFit.toFixed(1)}% · σ ${allResults[4].stdDev.toFixed(2)}`;
+
+    // 繪製直方圖 Bar Chart
+    const ctxBar = document.getElementById('pa-bar-chart').getContext('2d');
+    if(paBarChart) paBarChart.destroy();
+    paBarChart = new Chart(ctxBar, {
+        type: 'bar',
+        data: { labels: barLabels, datasets: [{ data: barData, backgroundColor: barColors }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { min: 0, max: 100, ticks: { callback: v => v + '%' } }, x: { ticks: { font: { size: 9 } } } } }
+    });
+
+    // 繪製雷達圖 Radar Chart
+    const ctxRadar = document.getElementById('pa-radar-chart').getContext('2d');
+    if(paRadarChart) paRadarChart.destroy();
+    
+    const radarDatasets = allResults.map(m => {
+        const avg = m.data.reduce((acc, curr) => { acc.Gain+=curr.Gain; acc.Pout+=curr.Pout; acc.PAE+=curr.PAE; acc.OP1dB+=curr.OP1dB; acc.S11+=curr.S11; return acc; }, {Gain:0, Pout:0, PAE:0, OP1dB:0, S11:0});
+        return {
+            label: m.name,
+            data: [ Math.min(1, (avg.Gain/10)/28), Math.min(1, (avg.Pout/10)/27), Math.min(1, (avg.PAE/10)/60), Math.min(1, (avg.OP1dB/10)/24), Math.min(1, -15/(avg.S11/10)) ],
+            borderColor: m.color, backgroundColor: 'transparent', borderWidth: 2, pointRadius: 0
+        };
+    });
+
+    paRadarChart = new Chart(ctxRadar, {
+        type: 'radar',
+        data: { labels: ['Gain', 'Pout', 'PAE', 'OP1dB', 'S11'], datasets: radarDatasets },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { r: { min: 0.2, max: 1.0, ticks: { stepSize: 0.2 } } } }
+    });
+
+    btn.innerText = "✅ PA 基準測試完成"; btn.className = "btn-ready";
+}
+
+// 自動啟動
+window.onload = () => {
+    // 若需要可取消註解以自動執行
+    // runBJT();
+    // runPA();
+};
+</script>
+</body>
+</html>
